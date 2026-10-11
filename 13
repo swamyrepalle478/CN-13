@@ -1,0 +1,99 @@
+
+from collections import Counter
+from scapy.all import rdpcap, IP, IPv6, TCP, UDP, ICMP, ARP
+
+def analyze_capture():
+    filename = input("Enter PCAP/PCAPNG file path: ").strip().strip('"')
+
+    try:
+        packets = rdpcap(filename)
+    except Exception as error:
+        print("Error opening capture file:", error)
+        return
+
+    print("\n===== WIRESHARK CAPTURE ANALYSIS =====")
+    print("Total packets:", len(packets))
+
+    protocol_count = Counter()
+    ip_count = Counter()
+
+    for packet in packets:
+        if ARP in packet:
+            protocol = "ARP"
+        elif TCP in packet:
+            protocol = "TCP"
+        elif UDP in packet:
+            protocol = "UDP"
+        elif ICMP in packet:
+            protocol = "ICMP"
+        elif IPv6 in packet:
+            protocol = "IPv6"
+        elif IP in packet:
+            protocol = "IP"
+        else:
+            protocol = "Other"
+
+        protocol_count[protocol] += 1
+
+        source = "-"
+        destination = "-"
+
+        if IP in packet:
+            source = packet[IP].src
+            destination = packet[IP].dst
+        elif IPv6 in packet:
+            source = packet[IPv6].src
+            destination = packet[IPv6].dst
+        elif ARP in packet:
+            source = packet[ARP].psrc
+            destination = packet[ARP].pdst
+
+        ip_count[source] += 1
+
+        print(
+            f"Time: {float(packet.time):.6f} | "
+            f"Source: {source} | Destination: {destination} | "
+            f"Protocol: {protocol} | Length: {len(packet)}"
+        )
+
+    print("\n===== PROTOCOL STATISTICS =====")
+    for protocol, count in protocol_count.most_common():
+        print(f"{protocol}: {count} packets")
+
+    print("\n===== SOURCE ADDRESS STATISTICS =====")
+    for address, count in ip_count.most_common():
+        print(f"{address}: {count} packets")
+
+    print("\n===== FILTER PACKETS =====")
+    target = input("Enter an IP address to filter, or press Enter to skip: ").strip()
+
+    if target:
+        matched = 0
+        for packet in packets:
+            if IP in packet:
+                if target in (packet[IP].src, packet[IP].dst):
+                    print(packet.summary())
+                    matched += 1
+            elif IPv6 in packet:
+                if target in (packet[IPv6].src, packet[IPv6].dst):
+                    print(packet.summary())
+                    matched += 1
+
+        print("Matching packets:", matched)
+
+    protocol = input(
+        "Enter protocol to filter (TCP/UDP/ICMP), or press Enter to skip: "
+    ).strip().upper()
+
+    if protocol in ("TCP", "UDP", "ICMP"):
+        layer = {"TCP": TCP, "UDP": UDP, "ICMP": ICMP}[protocol]
+        matches = [packet for packet in packets if layer in packet]
+        print(f"\n{protocol} packets: {len(matches)}")
+
+        for packet in matches:
+            print(packet.summary())
+
+    print("\nAnalysis completed.")
+
+if __name__ == "__main__":
+    analyze_capture()
